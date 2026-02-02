@@ -7,15 +7,18 @@ object Main {
 
     // 1. Initialisation de la session Spark avec configuration Minio (S3)
     val spark = SparkSession.builder()
-      .appName("Ex01_Data_Retrieval")
-      .master("local[*]")
-      .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9001") // Adresse de Minio Docker
-      .config("spark.hadoop.fs.s3a.access.key", "minio")      // Vérifiez vos clés Docker
-      .config("spark.hadoop.fs.s3a.secret.key", "minio123")
-      .config("spark.hadoop.fs.s3a.path.style.access", "true")
-      .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-      .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
+      .appName("SparkApp")
+      .master("local")
+      .config("fs.s3a.access.key", "minio")
+      .config("fs.s3a.secret.key", "minio123")
+      .config("fs.s3a.endpoint", "http://localhost:9000/") // A changer lors du déploiement
+      .config("fs.s3a.path.style.access", "true")
+      .config("fs.s3a.connection.ssl.enable", "false")
+      .config("fs.s3a.attempts.maximum", "1")
+      .config("fs.s3a.connection.establish.timeout", "6000")
+      .config("fs.s3a.connection.timeout", "5000")
       .getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
 
     // URL du fichier Parquet (Exemple: Janvier 2023 - Yellow Taxi)
     // Astuce: Vous pouvez rendre cette URL dynamique via les arguments (args)
