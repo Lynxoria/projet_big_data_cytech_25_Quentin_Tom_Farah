@@ -5,43 +5,48 @@ import java.nio.file.{Files, Paths, StandardCopyOption}
 object Main {
   def main(args: Array[String]): Unit = {
 
-    // 1. Initialisation de la session Spark avec configuration Minio (S3)
+    // --- FIX WINDOWS OBLIGATOIRE ---
+    System.setProperty("hadoop.home.dir", "C:\\hadoop")
+    // LA LIGNE QUI MANQUAIT POUR L'ERREUR "RELATIVE PATH":
+    System.setProperty("hadoop.tmp.dir", System.getProperty("java.io.tmpdir"))
+
+    // 1. Initialisation de la session Spark
     val spark = SparkSession.builder()
-      .appName("SparkApp")
-      .master("local")
-      .config("fs.s3a.access.key", "minio")
-      .config("fs.s3a.secret.key", "minio123")
-      .config("fs.s3a.endpoint", "http://localhost:9000/") // A changer lors du déploiement
-      .config("fs.s3a.path.style.access", "true")
-      .config("fs.s3a.connection.ssl.enable", "false")
-      .config("fs.s3a.attempts.maximum", "1")
-      .config("fs.s3a.connection.establish.timeout", "6000")
-      .config("fs.s3a.connection.timeout", "5000")
+      .appName("Ex01_Data_Retrieval")
+      .master("local[*]")
+      .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000")
+      // Identifiants Docker (minioadmin)
+      .config("spark.hadoop.fs.s3a.access.key", "minio")
+      .config("spark.hadoop.fs.s3a.secret.key", "minio123")
+      .config("spark.hadoop.fs.s3a.path.style.access", "true")
+      .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
+      .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+      .config("spark.hadoop.fs.s3a.endpoint.region", "us-east-1")
+      // Force l'utilisation d'un buffer disque valide sur Windows
+      .config("spark.hadoop.fs.s3a.buffer.dir", System.getProperty("java.io.tmpdir"))
       .getOrCreate()
+
     spark.sparkContext.setLogLevel("WARN")
 
-    // URL du fichier Parquet (Exemple: Janvier 2023 - Yellow Taxi)
-    // Astuce: Vous pouvez rendre cette URL dynamique via les arguments (args)
     val fileUrl = "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-01.parquet"
-    val localPath = System.getProperty("java.io.tmpdir") + "temp_taxi_data.parquet"
+    // Chemin local sécurisé
+    val tempDir = System.getProperty("java.io.tmpdir")
+    val localPath = Paths.get(tempDir, "temp_taxi_data.parquet").toString
+    // Chemin Minio
     val minioPath = "s3a://nyc-raw/yellow_tripdata_2023-01.parquet"
 
     println(s"--> Téléchargement de $fileUrl ...")
 
-    // 2. Téléchargement du fichier en local (méthode simple via Java NIO)
-    // Spark ne télécharge pas nativement via HTTP vers S3 sans complexité,
-    // le plus simple est de passer par un temp local.
     try {
+      // 2. Téléchargement
       val in = new URL(fileUrl).openStream()
       Files.copy(in, Paths.get(localPath), StandardCopyOption.REPLACE_EXISTING)
       println("--> Téléchargement local terminé.")
 
-      // 3. Lecture et Écriture vers Minio
-      println("--> Lecture du fichier et écriture vers Minio...")
-
+      // 3. Lecture et Écriture
+      println("--> Lecture et écriture vers Minio...")
       val df = spark.read.parquet(localPath)
 
-      // On écrit directement dans le Data Lake
       df.write
         .mode("overwrite")
         .parquet(minioPath)
@@ -50,7 +55,7 @@ object Main {
 
     } catch {
       case e: Exception =>
-        println("Erreur lors du traitement : " + e.getMessage)
+        println("ERREUR : " + e.getMessage)
         e.printStackTrace()
     } finally {
       spark.stop()
