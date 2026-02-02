@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ScalaCompilerConfiguration">
+    <option name="separateProdTestSources" value="true" />
+    <profile name="sbt 1" modules="ex02_data_ingestion,ex02_data_ingestion.main,ex02_data_ingestion.test,ex02_data_ingestion_7125,ex02_data_ingestion_7125.main,ex02_data_ingestion_7125.test" />
+  </component>
+</project>
