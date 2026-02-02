@@ -9,9 +9,9 @@ object Main {
     val spark = SparkSession.builder()
       .appName("Ex01_Data_Retrieval")
       .master("local[*]")
-      .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000") // Adresse de Minio Docker
-      .config("spark.hadoop.fs.s3a.access.key", "minioadmin")      // Vérifiez vos clés Docker
-      .config("spark.hadoop.fs.s3a.secret.key", "minioadmin")
+      .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9001") // Adresse de Minio Docker
+      .config("spark.hadoop.fs.s3a.access.key", "minio")      // Vérifiez vos clés Docker
+      .config("spark.hadoop.fs.s3a.secret.key", "minio123")
       .config("spark.hadoop.fs.s3a.path.style.access", "true")
       .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
       .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
@@ -20,7 +20,7 @@ object Main {
     // URL du fichier Parquet (Exemple: Janvier 2023 - Yellow Taxi)
     // Astuce: Vous pouvez rendre cette URL dynamique via les arguments (args)
     val fileUrl = "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-01.parquet"
-    val localPath = "/tmp/temp_taxi_data.parquet"
+    val localPath = System.getProperty("java.io.tmpdir") + "temp_taxi_data.parquet"
     val minioPath = "s3a://nyc-raw/yellow_tripdata_2023-01.parquet"
 
     println(s"--> Téléchargement de $fileUrl ...")
