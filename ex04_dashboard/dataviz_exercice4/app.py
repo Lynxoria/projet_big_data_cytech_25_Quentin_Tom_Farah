@@ -23,7 +23,6 @@ def load_data():
         total_amount,
         payment_type_id
     FROM fact_trips
-    LIMIT 10000 -- On limite pour l'exemple, retirez la limite en prod
     """
 
     try:
@@ -77,3 +76,40 @@ if not df.empty:
 
 else:
     st.warning("Aucune donnée trouvée. Vérifiez que le conteneur Postgres tourne et que l'ingestion Spark a fonctionné.")
+
+st.markdown("---")
+st.header("Analyses Approfondies")
+
+col3, col4 = st.columns(2)
+
+with col3:
+    st.subheader("Heures de Pointe")
+    # On extrait l'heure de la date
+    df['hour'] = pd.to_datetime(df['date']).dt.hour
+    hourly_counts = df.groupby('hour').size().reset_index(name='counts')
+
+    fig_time = px.bar(
+        hourly_counts,
+        x='hour',
+        y='counts',
+        title="Nombre de courses par heure de la journée",
+        labels={'hour': 'Heure', 'counts': 'Nombre de courses'}
+    )
+    st.plotly_chart(fig_time, use_container_width=True)
+
+with col4:
+    st.subheader("Types de Paiement")
+    # On mappe les IDs (1=Credit Card, 2=Cash, etc.) pour que ce soit lisible
+    payment_map = {1: 'Credit Card', 2: 'Cash', 3: 'No Charge', 4: 'Dispute', 0: 'Unknown'}
+    df['payment_name'] = df['payment_type_id'].map(payment_map).fillna("Autre")
+
+    payment_counts = df.groupby('payment_name').size().reset_index(name='counts')
+
+    fig_pie = px.pie(
+        payment_counts,
+        values='counts',
+        names='payment_name',
+        title="Répartition des moyens de paiement",
+        hole=0.4 # Pour faire un donut chart
+    )
+    st.plotly_chart(fig_pie, use_container_width=True)
