@@ -1,0 +1,8 @@
+pandas
+scikit-learn
+s3fs
+pyarrow
+joblib
+numpy
+flake8
+streamlit
