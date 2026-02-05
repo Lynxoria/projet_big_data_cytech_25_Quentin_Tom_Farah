@@ -1,22 +1,27 @@
--- Nettoyage préalable (au cas où)
-DROP TABLE IF EXISTS fact_trips CASCADE;
-DROP TABLE IF EXISTS dim_rate_code CASCADE;
-DROP TABLE IF EXISTS dim_payment_type CASCADE;
 
--- 1. Dimension : Type de paiement
-CREATE TABLE dim_payment_type (
-                                  payment_type_id INT PRIMARY KEY,
-                                  payment_name VARCHAR(50)
+
+-- Type de Paiement
+CREATE TABLE dim_payment_type
+(
+    payment_type_id INT PRIMARY KEY,
+    payment_name    VARCHAR(50)
 );
 
--- 2. Dimension : Tarif (Rate Code)
+-- Codes Tarifs
 CREATE TABLE dim_rate_code (
                                rate_code_id INT PRIMARY KEY,
                                rate_description VARCHAR(100)
 );
 
--- 3. Table de Faits : Les courses (Fact Table)
--- Elle contient les mesures et les clés étrangères
+-- Vendeurs
+CREATE TABLE dim_vendor (
+                            vendor_id INT PRIMARY KEY,
+                            vendor_name VARCHAR(100)
+);
+
+-- ================================================================
+-- 3. CRÉATION DE LA TABLE DES FAITS (COURSES)
+-- ================================================================
 CREATE TABLE fact_trips (
                             trip_id SERIAL PRIMARY KEY,
                             vendor_id INT,
@@ -39,7 +44,7 @@ CREATE TABLE fact_trips (
                             congestion_surcharge DOUBLE PRECISION,
                             airport_fee DOUBLE PRECISION,
 
-    -- Clés étrangères (Relations)
+    -- Clés étrangères (Vérification stricte)
                             CONSTRAINT fk_payment FOREIGN KEY (payment_type_id) REFERENCES dim_payment_type(payment_type_id),
                             CONSTRAINT fk_rate FOREIGN KEY (rate_code_id) REFERENCES dim_rate_code(rate_code_id)
 );
