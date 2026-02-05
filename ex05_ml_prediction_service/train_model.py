@@ -12,7 +12,7 @@ MINIO_ENDPOINT = "http://localhost:9000"
 MINIO_ACCESS_KEY = "minio"
 MINIO_SECRET_KEY = "minio123"
 BUCKET_NAME = "nyc-raw"
-FILE_PATH = "processed/yellow_tripdata_2023-01_clean.parquet"
+FILE_PATH = "processed/yellow_tripdata_2023_Q1_clean.parquet"
 
 
 def get_minio_fs():
