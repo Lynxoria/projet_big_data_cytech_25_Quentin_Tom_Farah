@@ -1,84 +1,59 @@
 import org.apache.spark.sql.SparkSession
-import java.net.URL
-import java.nio.file.{Files, Paths, StandardCopyOption}
+import java.nio.file.Paths
 
 object Main {
   def main(args: Array[String]): Unit = {
 
-    // --- FIX WINDOWS OBLIGATOIRE ---
+    // --- CONFIG WINDOWS/HADOOP ---
     System.setProperty("hadoop.home.dir", "C:\\hadoop")
     System.setProperty("hadoop.tmp.dir", System.getProperty("java.io.tmpdir"))
 
-    // 1. Initialisation de la session Spark (Une seule fois au début)
     val spark = SparkSession.builder()
-      .appName("Ex01_Data_Retrieval_MultiFiles")
+      .appName("Ex01_Local_to_Minio")
       .master("local[*]")
       .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000")
       .config("spark.hadoop.fs.s3a.access.key", "minio")
       .config("spark.hadoop.fs.s3a.secret.key", "minio123")
       .config("spark.hadoop.fs.s3a.path.style.access", "true")
-      .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
       .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-      .config("spark.hadoop.fs.s3a.endpoint.region", "us-east-1")
-      .config("spark.hadoop.fs.s3a.buffer.dir", System.getProperty("java.io.tmpdir"))
+      .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
       .getOrCreate()
 
     spark.sparkContext.setLogLevel("WARN")
 
-    // --- LISTE DES FICHIERS À TRAITER (Janvier, Février, Mars) ---
     val filesToProcess = Seq(
       "yellow_tripdata_2023-01.parquet",
       "yellow_tripdata_2023-02.parquet",
       "yellow_tripdata_2023-03.parquet"
     )
 
-    val baseUrl = "https://d37ci6vzurychx.cloudfront.net/trip-data/"
-    val tempDir = System.getProperty("java.io.tmpdir")
+    // On pointe directement sur ton dossier data/raw du projet
+    val projectDir = System.getProperty("user.dir")
+    val dataRawDir = Paths.get(projectDir, "data", "raw")
 
-    println(s"--> Démarrage du traitement pour ${filesToProcess.length} fichiers...")
+    println(s"--> Lecture depuis : $dataRawDir")
 
-    try {
-      // BOUCLE SUR CHAQUE FICHIER
-      filesToProcess.foreach { fileName =>
-        val fileUrl = baseUrl + fileName
-        val localPath = Paths.get(tempDir, fileName).toString
-        val minioPath = s"s3a://nyc-raw/$fileName"
+    filesToProcess.foreach { fileName =>
+      val localPath = dataRawDir.resolve(fileName).toString
+      val minioPath = s"s3a://nyc-raw/$fileName"
 
-        println(s"\n------------------------------------------------")
-        println(s"--> Traitement de : $fileName")
-        println(s"------------------------------------------------")
+      println(s"--> Traitement de $fileName")
 
-        try {
-          // 2. Téléchargement
-          println(s"--> Téléchargement depuis $fileUrl ...")
-          val in = new URL(fileUrl).openStream()
-          Files.copy(in, Paths.get(localPath), StandardCopyOption.REPLACE_EXISTING)
-          in.close() // Bonne pratique : fermer le stream
-          println("--> Téléchargement local terminé.")
+      try {
+        // 1. On lit le fichier qui est DÉJÀ sur ton PC
+        val df = spark.read.parquet(localPath)
 
-          // 3. Lecture et Écriture vers Minio
-          println(s"--> Envoi vers Minio ($minioPath)...")
-          val df = spark.read.parquet(localPath)
+        // 2. On l'écrit dans Minio (C'est ça l'ingestion)
+        df.write.mode("overwrite").parquet(minioPath)
 
-          df.write
-            .mode("overwrite")
-            .parquet(minioPath)
+        println(s"✅ Envoyé vers Minio : $minioPath")
 
-          println(s"✅ Succès pour $fileName")
-
-          // Optionnel : Supprimer le fichier local pour libérer de l'espace
-          // Files.deleteIfExists(Paths.get(localPath))
-
-        } catch {
-          case e: Exception =>
-            println(s"❌ ERREUR sur le fichier $fileName : " + e.getMessage)
-            e.printStackTrace()
-        }
+      } catch {
+        case e: Exception =>
+          println(s"❌ Erreur (Vérifie que le fichier est bien dans data/raw) : ${e.getMessage}")
       }
-
-    } finally {
-      println("\n--> Arrêt de la session Spark.")
-      spark.stop()
     }
+
+    spark.stop()
   }
 }
