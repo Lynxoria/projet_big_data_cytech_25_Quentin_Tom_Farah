@@ -73,7 +73,7 @@ flake8 train_model.py ml_app.py
 # 5. Entraînement du Modèle
 # Récupère les données propres depuis MinIO -> Génère 'taxi_model.pkl'
 python train_model.py
-# Attendu : "✅ SUCCÈS : RMSE < 10 respecté"
+# Attendu : " SUCCÈS : RMSE < 10 respecté"
 
 # 6. Lancer l'Interface de Prédiction
 python -m streamlit run ml_app.py
