@@ -2,6 +2,20 @@ import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.apache.spark.sql.functions._
 import java.util.Properties
 
+/**
+ * =================================================================================
+ * Projet      : NYC Taxi Big Data Architecture
+ * Exercice    : 2 - Nettoyage et Ingestion Multi-branches
+ * Description : Ce script réalise le pipeline ETL principal.
+ * 1. Extraction : Lecture des fichiers Parquet hétérogènes (Q1 2023).
+ * 2. Transformation : Standardisation des schémas (gestion des colonnes manquantes)
+ * et nettoyage des données (valeurs négatives, nulls).
+ * 3. Chargement (Multi-branche) :
+ * - Branche 1 : Stockage Data Lake (MinIO) pour le Machine Learning.
+ * - Branche 2 : Stockage Data Warehouse (PostgreSQL) pour la BI.
+ * =================================================================================
+ */
+
 object Main {
 
   def main(args: Array[String]): Unit = {
@@ -16,7 +30,8 @@ object Main {
       .config("spark.hadoop.fs.s3a.path.style.access", "true")
       .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
       .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
-      .config("spark.sql.caseSensitive", "false") // Gère airport_fee vs Airport_fee
+      // Important : permet de gérer "airport_fee" et "Airport_fee" sans erreur immédiate
+      .config("spark.sql.caseSensitive", "false")
       .getOrCreate()
 
     spark.sparkContext.setLogLevel("WARN")
@@ -32,8 +47,11 @@ object Main {
 
     try {
       // --- 2. LECTURE & STANDARDISATION INDIVIDUELLE ---
-      // On lit chaque fichier séparément pour laisser Spark déduire le schéma correct par fichier
-      // Puis on cast tout vers un format standard
+      /*
+       * Stratégie : "Divide & Conquer"
+       * Au lieu de lire tous les fichiers d'un coup (ce qui ferait planter Spark si les types changent),
+       * on lit chaque fichier individuellement, on force son schéma, puis on fusionne.
+       */
       val dataframes = files.map { filePath =>
         println(s"--> Lecture de $filePath ...")
         val df = spark.read.parquet(filePath)
@@ -43,22 +61,28 @@ object Main {
       // --- 3. FUSION (UNION) ---
       println("--> Fusion des 3 mois...")
       // reduce(_ unionByName _) fusionne tous les DataFrames de la liste en un seul
+      // 'unionByName' permet de fusionner même si l'ordre des colonnes diffère.
       val rawDf = dataframes.reduce(_ unionByName _)
 
       // --- 4. NETTOYAGE ---
       println("--> Nettoyage des données...")
       val cleanedDf = rawDf
+        // Règle 1 : Cohérence physique (pas de distance négative)
         .filter(col("trip_distance") > 0)
+        // Règle 1 : Cohérence physique (pas de distance négative)
         .filter(col("total_amount") >= 0)
+        // Règle 1 : Cohérence physique (pas de distance négative)
         .na.fill(1, Seq("passenger_count")) // Remplace null par 1
         .filter(col("passenger_count") > 0)
 
+      // Mise en cache car ce DataFrame va être utilisé deux fois (Branche 1 & 2)
       cleanedDf.cache()
       println(s"   -> Total lignes propres : ${cleanedDf.count()}")
 
       // --- 5. BRANCHE 1 : Minio (ML) ---
       val minioOutputPath = "s3a://nyc-raw/processed/yellow_tripdata_2023_Q1_clean.parquet"
       println(s"--> Sauvegarde Minio : $minioOutputPath")
+
       cleanedDf.write.mode("overwrite").parquet(minioOutputPath)
 
       // --- 6. BRANCHE 2 : Postgres (BI) ---
@@ -81,7 +105,7 @@ object Main {
         .mode(SaveMode.Append)
         .jdbc(jdbcUrl, "fact_trips", dbProperties)
 
-      println("✅ Terminé avec succès !")
+      println("Terminé avec succès !")
 
     } catch {
       case e: Exception =>
@@ -93,18 +117,18 @@ object Main {
   }
 
   /**
-   * Fonction qui force un DataFrame à avoir un schéma précis via des CASTs.
-   * C'est la méthode la plus sûre pour gérer l'évolution de schéma.
+   * Harmonise le schéma d'un DataFrame entrant.
+   * Gère les changements de types (Int vs Double) et les changements de noms (Casse).
+   * * @param df Le DataFrame brut lu depuis un fichier Parquet
+   * @return Un DataFrame avec un schéma strict et unifié
    */
   def standardizeSchema(df: DataFrame): DataFrame = {
-    // On liste les colonnes qu'on veut absolument et leur type cible
-    // Si une colonne n'existe pas dans le fichier, lit null (via un try/catch ou vérification optionnelle)
-    // Ici on suppose que les colonnes existent mais ont le mauvais type.
 
     var tempDf = df
 
-    // Liste des colonnes critiques et leur cast cible
-    // On cast tout ce qui est ID en Long, tout ce qui est Prix/Distance en Double
+    // 1. Définition des types cibles (Target Types)
+    // On utilise Double pour les montants/quantités pour éviter les erreurs de précisions
+    // On utilise Long pour les Identifiants
     val casts = Map(
       "VendorID" -> "long",
       "passenger_count" -> "double", // On passe par double pour accepter 1.0 et 1
@@ -121,23 +145,26 @@ object Main {
       "improvement_surcharge" -> "double",
       "total_amount" -> "double",
       "congestion_surcharge" -> "double"
-      // airport_fee est géré dynamiquement car il change de casse
+      // airport_fee est géré dynamiquement car il change de case
     )
-
+    // Application des casts si la colonne existe
     casts.foreach { case (colName, typeName) =>
       if (tempDf.columns.contains(colName)) {
         tempDf = tempDf.withColumn(colName, col(colName).cast(typeName))
       }
     }
 
-    // Gestion spéciale pour airport_fee (Casse variable)
+    // 2. Gestion spécifique de 'airport_fee' (Colonne instable)
+    // Cas 1 : La colonne existe sous le nom "Airport_fee" (Majuscule) -> On renomme
     if (tempDf.columns.contains("Airport_fee")) {
       tempDf = tempDf.withColumnRenamed("Airport_fee", "airport_fee")
     }
+    // Cas 2 : La colonne existe (en minuscule) -> On cast en double
     if (tempDf.columns.contains("airport_fee")) {
       tempDf = tempDf.withColumn("airport_fee", col("airport_fee").cast("double"))
     } else {
-      // Si la colonne n'existe pas (ex: Janvier), on la crée avec 0.0 pour pouvoir fusionner
+      // Cas 3 : La colonne n'existe pas (ex: fichiers avant 2023) -> On crée une colonne par défaut
+      // Cela permet l'unionByName sans erreur.
       tempDf = tempDf.withColumn("airport_fee", lit(0.0))
     }
 

@@ -7,6 +7,19 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 
+"""
+=================================================================================
+Projet      : NYC Taxi Big Data Architecture
+Exercice    : 5 - Machine Learning (Entraînement & Validation)
+Description : Ce script automatise le cycle de vie du modèle ML (MLOps léger).
+              1. Chargement des données nettoyées depuis le Data Lake (MinIO).
+              2. Validation de la qualité des données (Tests Unitaires).
+              3. Entraînement d'une Régression Linéaire (Target: total_amount).
+              4. Évaluation de la performance (RMSE < 10).
+              5. Sauvegarde du modèle sérialisé (.pkl).
+=================================================================================
+"""
+
 # --- CONFIGURATION ---
 MINIO_ENDPOINT = "http://localhost:9000"
 MINIO_ACCESS_KEY = "minio"
@@ -65,7 +78,7 @@ def validate_input_data(df):
     assert pd.api.types.is_numeric_dtype(df['total_amount']), \
         "Erreur: total_amount doit être numérique"
 
-    print("✅ Données valides (Tests passés).")
+    print(" Données valides (Tests passés).")
 
 
 def load_data(fs, bucket, path):
@@ -98,7 +111,7 @@ def load_data(fs, bucket, path):
         data_files = [f for f in files if "part-" in f and "_SUCCESS" not in f]
 
         if not data_files:
-            print("❌ Aucun fichier de données trouvé.")
+            print(" Aucun fichier de données trouvé.")
             return None
 
         dfs = []
@@ -161,7 +174,7 @@ def train_model():
     try:
         validate_input_data(df)
     except AssertionError as e:
-        print(f"❌ Arrêt : {e}")
+        print(f" Arrêt : {e}")
         sys.exit(1)
 
     # 2. Preprocessing (Nettoyage Outliers)
@@ -188,13 +201,13 @@ def train_model():
     rmse = np.sqrt(mean_squared_error(y_test, preds))
 
     print("-" * 30)
-    print(f"📊 RMSE : {rmse:.2f}")
+    print(f" RMSE : {rmse:.2f}")
     print("-" * 30)
 
     if rmse < 10:
-        print("✅ SUCCÈS : RMSE < 10 respecté.")
+        print(" SUCCÈS : RMSE < 10 respecté.")
     else:
-        print("⚠️ ATTENTION : RMSE > 10.")
+        print(" ATTENTION : RMSE > 10.")
 
     # 7. Sauvegarde
     joblib.dump(model, 'taxi_model.pkl')

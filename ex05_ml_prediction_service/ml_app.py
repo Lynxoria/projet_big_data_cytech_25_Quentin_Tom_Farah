@@ -5,6 +5,17 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
+"""
+=================================================================================
+Projet      : NYC Taxi Big Data Architecture
+Exercice    : 5 - Interface de Prédiction (Front-end ML)
+Description : Interface Streamlit permettant aux utilisateurs finaux d'interroger
+              le modèle de Machine Learning entraîné.
+              Elle visualise également la position de la prédiction sur la courbe
+              de régression pour expliquer le résultat (Explainable AI).
+=================================================================================
+"""
+
 # --- CONFIGURATION ---
 st.set_page_config(page_title="NYC Taxi Fare Predictor", page_icon="🤖")
 
@@ -17,14 +28,18 @@ Entrez une distance pour estimer le coût de la course.
 # --- 1. CHARGEMENT DU MODÈLE ---
 @st.cache_resource
 def load_model():
+    """
+    Charge le modèle .pkl depuis le disque.
+    Utilise le cache pour ne pas recharger le fichier à chaque interaction utilisateur.
+    """
     try:
-        # Assurez-vous que le chemin est correct vers votre fichier .pkl
         model = joblib.load('taxi_model.pkl')
         return model
     except FileNotFoundError:
-        st.error("❌ Fichier 'taxi_model.pkl' introuvable. Avez-vous lancé l'entraînement ?")
+        st.error(" Fichier 'taxi_model.pkl' introuvable. Avez-vous lancé l'entraînement ?")
         return None
 
+# Tentative de chargement
 model = load_model()
 
 if model:
@@ -47,7 +62,7 @@ if model:
         prediction = model.predict(features)[0]
 
         # Affichage du résultat
-        st.success(f"💰 Prix estimé : **${prediction:.2f}**")
+        st.success(f" Prix estimé : **${prediction:.2f}**")
 
         # --- 4. VISUALISATION CONTEXTUELLE ---
         st.subheader("Visualisation de la Prédiction")

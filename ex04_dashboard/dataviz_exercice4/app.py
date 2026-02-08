@@ -3,11 +3,25 @@ import pandas as pd
 from sqlalchemy import create_engine
 import plotly.express as px
 
-# 1. Configuration de la page
+"""
+=================================================================================
+Projet      : NYC Taxi Big Data Architecture
+Exercice    : 4 - Visualisation de Données (Business Intelligence)
+Description : Tableau de bord interactif connecté au Data Warehouse (PostgreSQL).
+              Il visualise les KPIs, la distribution des prix et les tendances.
+              
+NOTE TECHNIQUE :
+Pour éviter l'erreur "MessageSizeError" de Streamlit (>200MB), ce script n'utilise 
+JAMAIS de 'SELECT *' sur la table complète (9M lignes).
+Il utilise des agrégations SQL (SUM, AVG, COUNT) ou de l'échantillonnage (RANDOM).
+=================================================================================
+"""
+
+# --- 1. CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="NYC Taxi Dashboard", layout="wide")
 st.title("🚖 NYC Taxi Data Warehouse Dashboard")
 
-# 2. Connexion à la Base de Données (Postgres)
+# --- 2. GESTION DE LA CONNEXION (DATABASE) ---
 @st.cache_resource
 def get_db_connection():
     # Format: postgresql+psycopg2://user:password@host:port/database
@@ -15,11 +29,15 @@ def get_db_connection():
 
 engine = get_db_connection()
 
-# --- CHARGEMENT OPTIMISÉ (SQL) ---
+# --- 3. FONCTIONS DE CHARGEMENT DE DONNÉES (OPTIMISÉES SQL) ---
 # On ne charge plus TOUT le dataframe d'un coup, on fait des requêtes spécifiques
 
 @st.cache_data
 def load_kpi_data():
+    """
+    Calcule les indicateurs clés (KPIs) globaux.
+    Optimisation : Le calcul (SUM, AVG) est fait par le moteur SQL, Python reçoit juste 1 ligne.
+    """
     query = """
             SELECT
                 SUM(total_amount) as total_revenue,
@@ -31,14 +49,23 @@ def load_kpi_data():
 
 @st.cache_data
 def load_histogram_data():
-    # On échantillonne pour l'histogramme aussi, sinon c'est trop lourd
+    """
+    Charge un échantillon de prix pour l'histogramme.
+    Limite : 100 000 lignes pour garantir la fluidité du navigateur.
+    Filtre : On exclut les montants > 200$ pour la lisibilité du graphique.
+    """
     query = "SELECT total_amount FROM fact_trips WHERE total_amount BETWEEN 0 AND 200 ORDER BY RANDOM() LIMIT 100000"
     return pd.read_sql(query, engine)
 
 @st.cache_data
 def load_scatter_sample():
-    # --- MODIFICATION ICI : ÉCHANTILLONNAGE ---
-    # On prend 10 000 points au hasard pour le scatter plot Distance vs Prix
+    """
+    Charge un échantillon pour le nuage de points (Distance vs Prix).
+
+    IMPORTANT : C'est cette fonction qui évite le crash 'MessageSizeError'.
+    Au lieu de charger 9 millions de points, on en prend 10 000 au hasard.
+    Cela suffit pour visualiser la corrélation et la densité.
+    """
     query = """
             SELECT trip_distance, total_amount
             FROM fact_trips
@@ -51,7 +78,10 @@ def load_scatter_sample():
 
 @st.cache_data
 def load_hourly_data():
-    # Agrégation SQL pour les heures de pointe
+    """
+    Agrège le nombre de courses par heure de la journée.
+    Optimisation : Utilisation de GROUP BY en SQL.
+    """
     query = """
             SELECT EXTRACT(HOUR FROM tpep_pickup_datetime) as hour, COUNT(*) as counts
             FROM fact_trips
@@ -62,7 +92,9 @@ def load_hourly_data():
 
 @st.cache_data
 def load_payment_data():
-    # Agrégation SQL pour les paiements
+    """
+    Agrège la répartition des types de paiement.
+    """
     query = """
             SELECT payment_type_id, COUNT(*) as counts
             FROM fact_trips
@@ -72,10 +104,15 @@ def load_payment_data():
 
 @st.cache_data
 def load_preview_data():
+    """
+    Affiche un simple aperçu des 5 premières lignes brutes.
+    """
     return pd.read_sql("SELECT * FROM fact_trips LIMIT 5", engine)
 
 
-# 3. KPIs (Indicateurs clés)
+# --- 4. AFFICHAGE DU DASHBOARD ---
+
+# A. Section KPIs
 try:
     kpi_df = load_kpi_data()
 
@@ -88,7 +125,7 @@ try:
 
     st.markdown("---")
 
-    # 4. Graphiques
+    # B. Section Graphiques (Ligne 1)
     col_g1, col_g2 = st.columns(2)
 
     with col_g1:
@@ -110,13 +147,13 @@ try:
         )
         st.plotly_chart(fig_scatter, use_container_width=True)
 
-    # 5. Données Brutes
     st.subheader("Aperçu des Données (Data Mart)")
     st.dataframe(load_preview_data())
 
     st.markdown("---")
     st.header("Analyses Approfondies")
 
+    # C. Section Graphiques (Ligne 2)
     col3, col4 = st.columns(2)
 
     with col3:
